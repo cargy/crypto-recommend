@@ -1,0 +1,99 @@
+openapi: 3.1.0
+info:
+  title: OpenAPI definition
+  version: v0
+servers:
+- url: http://localhost:8080
+  description: Generated server url
+tags:
+- name: crypto-api
+  description: The Crypto Recommendations API
+paths:
+  /cryptos:
+    get:
+      tags:
+      - crypto-api
+      summary: Get all cryptos
+      description: "Get all Cryptos, sorted by their monthly normalized range."
+      operationId: all
+      responses:
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/CryptoPriceSummary'
+  /cryptos/{symbol}:
+    get:
+      tags:
+      - crypto-api
+      summary: Find crypto by symbol
+      description: Returns a single crypto with it's monthly oldest/newest/min/max
+        values.
+      operationId: one
+      parameters:
+      - name: symbol
+        in: path
+        description: The crypto symbol to be fetched
+        required: true
+        schema:
+          type: string
+      responses:
+        "404":
+          description: 'Could not find crypto '
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CryptoPriceSummary'
+        "400":
+          description: Invalid ID supplied
+  /cryptos/highest-range/{date}:
+    get:
+      tags:
+      - crypto-api
+      summary: Find highest crypto normalized range
+      description: Return the crypto with the highest normalized range for a specific
+        day.
+      operationId: date
+      parameters:
+      - name: date
+        in: path
+        description: "The data, in YYYY-MM-DD format, for which the highest normalized\
+          \ range crypto will be returned."
+        required: true
+        schema:
+          type: string
+          format: date
+      responses:
+        "200":
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CryptoPriceSummary'
+        "400":
+          description: No data available
+components:
+  schemas:
+    CryptoPriceSummary:
+      properties:
+        symbol:
+          type: string
+        periodicity:
+          type: string
+        period:
+          type: string
+        oldestPrice:
+          type: number
+        newestPrice:
+          type: number
+        minPrice:
+          type: number
+        maxPrice:
+          type: number
+        normalizedRange:
+          type: number
+          format: float

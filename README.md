@@ -25,7 +25,30 @@ But even with just **Daily** and **Monthly** prices in one traditional RDBMS, th
 
 ## Database Schema
 
-The database schema can 
+The database schema can be found in [/schema](./schema/).
+
+![alt crypto-db ER Diagram](doc/crypto-db-er-diagram.png)
+
+You can drop and create the schema using `psql` after you define the `SCHEMA` environemnt variable.
+
+```shell
+psql -f schema/all.sql
+```
+
+A [compose.yml](./compose.yml) file is available in order to spin up a Postgres database that can be used for testing the applciation locally.
+
+Make sure you create a `db_passowrd.txt` so it will be used as the Postgres datbase password.
+
+```shell
+docker compose up
+```
+
+Exporting the environment variables inlcuded in [env.docker](env.docker) will allow you to easily connect to you dockerized database.
+
+```shell
+set -a; source env.docker; set +a
+```
+
 
 ## Implementation
 
