@@ -1,128 +1,160 @@
 # Crypto Recommendation Service
 
-
-## TODO
-
-- [x] Read all the prices from the csv files
-- [ ] Create Daily and Monthly Aggregations
-- [ ] Add crypto validator in endpoints
-- [ ] Create architectural diagram for the suggested architecture
-
-
+This project is PoC on how we could design and implement a crypto recommendation service, according to the requirements provided in [CryptoRecommendationsService1.pdf](doc/CryptoRecommendationsService1.pdf).
 
 ## Requirements
 
-### Reads all the prices from the csv files
+The following requirements were identified and are outlined below, as the first iteration for the implementation of the crypto recommendations service:
 
-### Calculate Monthly prices
+1. Read all the prices from CSV files. Each file contains multiple prices per day for a specific a crypto. Each file contains a month of data.
+1. Calculate oldest/newest/min/max for each crypto for the whole month
+1. Implement an API, including documentation, with endpoints that provide the following information:
+    - All available cryptos ordered by normalized range (i.e. (max-min)/min ) in descending order
+    - A specific crypto monthly prices (oldest/newes/min/max)
+    - The crypto with the highest normalized range for a specific day
+1. Take into consideration future scaling of the service for further cryptos and/or further aggregation (six months, year)
+1. Consider the service will be deployed to a Kubernetes cluster for high available and scalability
 
-Calculates oldest/newest/min/max for each crypto for the whole month.
+## Assesment
 
-### All the cryptos ordered by normalized range
+According to the current requirements the *high granularity of the data in the CSV files* (**multiple prices / day / crypto**) is not necesary at runtime. We currenly only need **Daily** and **Monthly** aggregations. Taking also into account the those are historical data we can perform pre-calculations and provide higher level aggregations to the recommendation service.
 
-Exposes an endpoint that will return a descending sorted list of all the cryptos, comparing the normalized range (i.e. (max-min)/min)
+That comes ofcourse with the downside that an pipeline will be needed in order to orchestrate the data export, transformation and loading. In order to separate concerns it would be a good idea to have one component handle the **data loading** and another providing the **recommendation endpoints**.
 
-`GET /ws/cryptos` (order by normalized range be default)
-Response:
+But even with just **Daily** and **Monthly** prices in one traditional RDBMS, the size of the table can increase significantly over the years or even further when new cryptos are added. Partitioning tha table on the aggregation level (`periodicity`) can improve read perfrormance as we are not usually expected to query between different aggregation levels.
+
+## Database Schema
+
+The database schema can 
+
+## Implementation
+
+This PoC implementation includes two different components demonstrating how such a crypto recommendation service could be implemented.
+
+### crypto-importer
+
+The [crypto-importer](./crypto-importer/) is responsible for monitoring a bucket with CSV files, importing them into the database and generating *Daily* and *Monthly* summaries ([crypto_price_summary](./schema/crypto-price-summary.sql) table).
+
+That is a *Spring Batch* project, that uses *Spring Integration* to monitor for changes into the bucket. Spring Integration was chosen for the file parsing so there a separation of concerns between with the batch process and also because it provides easy integratin with vairous Cloud Object Storage services (e.g. Amazon S3, GCS, ...) that could be a good option because of their various benefits in cloud environemnts (versioning, easy integration, ...).
+
+The Spring Batch project includes one job with three (3) steps:
+
+1. [ReadCryptoFileStep.java](./crypto-importer/src/main/java/com/agileactors/cryptoimporter/config/ReadCryptoFileStep.java) - read the CSV file and load it to [crypto_prices](./schema/crypto-prices.sql) table
+1. [MonthlySummaryStep.java](./crypto-importer/src/main/java/com/agileactors/cryptoimporter/config/MonthlySummaryStep.java) - generate **Monthly** summaries
+1. [DailySummaryStep.java](./crypto-importer/src/main/java/com/agileactors/cryptoimporter/config/DailySummaryStep.java) - generate **Daily** summaries
+
+
+### crypto-api
+
+The [crypto-api](./crypto-api/) provides a REST API and it's [OpenAPI spec](http://localhost:8080/swagger-ui), with the following endpoints:
+
+#### Find all cryptos
+
+    GET /cryptos
+
+Get all Cryptos, sorted by their monthly normalized range.
+
+<details>
+<summary><em>Response 200 OK</em></summary>
 
 ```json
 [
-    {
-        "code": "BTC",
-        "normalized_range": 0.25
-    },
-        {
-        "code": "DOGE",
-        "normalized_range": 0.25
-    }
+  {
+    "symbol": "ETH",
+    "periodicity": "Monthly",
+    "period": "20220100",
+    "oldestPrice": 3715.32000,
+    "newestPrice": 2672.50000,
+    "minPrice": 2336.52000,
+    "maxPrice": 3828.11000,
+    "normalizedRange": 0.638381
+  },
+  {
+    "symbol": "XRP",
+    "periodicity": "Monthly",
+    "period": "20220100",
+    "oldestPrice": 0.82980,
+    "newestPrice": 0.58670,
+    "minPrice": 0.56160,
+    "maxPrice": 0.84580,
+    "normalizedRange": 0.5060541
+  },
+  {
+    "symbol": "LTC",
+    "periodicity": "Monthly",
+    "period": "20220100",
+    "oldestPrice": 148.10000,
+    "newestPrice": 109.60000,
+    "minPrice": 103.40000,
+    "maxPrice": 151.50000,
+    "normalizedRange": 0.46518376
+  },
+  {
+    "symbol": "BTC",
+    "periodicity": "Monthly",
+    "period": "20220100",
+    "oldestPrice": 46813.21000,
+    "newestPrice": 38415.79000,
+    "minPrice": 33276.59000,
+    "maxPrice": 47722.66000,
+    "normalizedRange": 0.4341211
+  }
 ]
 ```
 
-1. Too many cryptos, we might need pagination
+</details>
 
-### Exposes an endpoint that will return the oldest/newest/min/max values for a requested crypto
+#### Find Crypto by symbol
 
-`GET /ws/cryptos/BTC`
+    GET /cryptos/{symbol}
 
-Response:
+Returns a single crypto with it's monthly oldest/newest/min/max values.
+
+<details>
+<summary><em>Response 200 OK</em></summary>
 
 ```json
-    {
-        "code": "BTC",
-        "prices": { // price object, might need to add more prices later like average price?
-            "oldest": 900,
-            "newest": 990,
-            "min": 800,
-            "max": 1000
-        }
-    }
+{
+  "symbol": "BTC",
+  "periodicity": "Monthly",
+  "period": "20220100",
+  "oldestPrice": 46813.21000,
+  "newestPrice": 38415.79000,
+  "minPrice": 33276.59000,
+  "maxPrice": 47722.66000,
+  "normalizedRange": 0.4341211
+}
 ```
 
-### Exposes an endpoint that will return the crypto with the highest normalized range for a specific day
+</details>
 
-`GET /ws/cryptos?day=2022-01-05&limit=1`
+#### Find crypto with highest normalized range
 
-## Analysis
+    GET /cryptos/highest-range/{date}
 
-### Options
+Return the crypto with the highest normalized range for a specific day.
 
-#### Option1: Polling storage for new/updated files
+<details>
+<summary><em>Response 200 OK</em></summary>
 
-A k8s cron job runs every (12 hours?) and finds new files (hash comparison).
-When a new file is found import endpoint is called passing the crypto code and file to be imported.
+```json
+{
+  "symbol": "XRP",
+  "periodicity": "Daily",
+  "period": "20220101",
+  "oldestPrice": 0.82980,
+  "newestPrice": 0.84580,
+  "minPrice": 0.82980,
+  "maxPrice": 0.84580,
+  "normalizedRange": 0.019281754
+}
+```
 
-[ ] Make sure that cryptos are only available after being fully imported.
+</details>
 
-Q: What if cron runs before file import is completed?
-A: Various Options depending on how often that could happen
+## Future Work
 
-1. Idempotent implementation (waste of resources if too often)
-1. Optimistic locking, second task will fail in commit (waste of resources if too often)
-1. Locking mechanism either using a distributed lock or a database lock.
+Some things that could further future proof the current implementation
 
-#### Advantages
-
-1. Simple way of distributing import work to multiple pods
-2. Simple storage parsing logic, checking with db if file was previously imported or not
-
-#### Disadvantages
-
-- /import end point has different user/consumer (cron job) that /cryptos, complicates security
-- 
-
-#### Option2: Polling storage for new/updated files
-
-So we can easily scale the importing process to multiple k8s nodes the implementation
-should be able:
-
-- handle concurrent import by multiple instances
-- idepondent process duplicate imports
-- 
-
-- Calculates oldest/newest/min/max for each crypto for the whole 
-
-Q: Should we do it while importing or on demand.
-
-- Exposes an endpoint that will return a descending sorted list of all the cryptos, comparing the normalized range (i.e. (max-min)/min)
-
-
-## Things to consider
-
-Documentation is our best friend, so it will be good to share one for the endpoints
-
-- Initially the cryptos are only five, but what if we want to include more? Will the recommendation service be able to scale?
-
-1. Add pagination to API when returning a list 
-2. 
-
-- New cryptos pop up every day, so we might need to safeguard recommendations service endpoints from not currently supported cryptos
-- For some cryptos it might be safe to invest, by just checking only one month's time frame. However, for some of them it might be more accurate to check six months or even a year. Will the recommendation service be able to handle this?
-
-## Extra mile for recommendation service (optional):
-
-- In XM we run everything on Kubernetes, so containerizing the recommendation service will add great value
-[ ] Containererize application
-
-- Malicious users will always exist, so it will be really beneficial if at least we can rate limit them (based on IP)
-
-1. We are in a kubernetes environment with possibly multiple pods serving the API. We need a way to track requests per IP between all pods
+- Add pagination to `/cryptos`, that could improve performance and UX
+- Introduce a `crypto_config` table that would hold the supported cryptos. That could also include upcoming cryptos that are still getting backfilled by *crypto-importer* but not returned by `crypto-api` until they are fully avaiable.
