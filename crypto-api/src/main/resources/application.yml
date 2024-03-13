@@ -1,0 +1,22 @@
+spring:
+  application:
+    name: crypto-api
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://localhost:5432/postgres
+    username: postgres
+    password: password
+
+springdoc:
+  version: '@springdoc.version@'
+  api-docs:
+    version: openapi_3_1
+  swagger-ui:
+    display-request-duration: true
+    groups-order: DESC
+    operationsSorter: method
+    use-root-path: true
+  show-actuator: true
+
+
+
