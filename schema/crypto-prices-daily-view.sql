@@ -7,7 +7,7 @@ WITH open_closing_prices AS (
         price,
         FIRST_VALUE (price) OVER (PARTITION BY symbol, TO_CHAR(timestamp, 'YYYYMMDD') ORDER BY timestamp) oldest_price,
         FIRST_VALUE (price) OVER (PARTITION BY symbol, TO_CHAR(timestamp, 'YYYYMMDD') ORDER BY timestamp DESC) newest_price
-    FROM crypto_prices
+    FROM :SCHEMA.crypto_prices
 )
 SELECT
     period,
